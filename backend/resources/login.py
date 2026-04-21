@@ -3,7 +3,7 @@ from flask import request
 from backend.services.login_s import login_user
 
 
-class Login(Resource):
+class Login(Resource):  # '/api/login'
     def post(self):
         data = request.get_json()
 
@@ -14,4 +14,4 @@ class Login(Resource):
 
         access_token, refresh_token = tokens
 
-        return {"access_token": access_token, "refresh_token": refresh_token}
+        return {"access_token": access_token, "refresh_token": refresh_token}, 200

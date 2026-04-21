@@ -1,0 +1,27 @@
+body {
+    background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+}
+
+input.input {
+    font-size: 1rem;
+}
+
+.box {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+@media screen and (max-width: 768px) {
+    .box {
+        padding: 2rem 1.5rem;
+    }
+}
+
+@media screen and (min-width: 769px) {
+    .box {
+        padding: 3rem;
+    }
+}
+
+#error_message {
+    text-align: center;
+}

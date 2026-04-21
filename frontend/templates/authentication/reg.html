@@ -2,9 +2,70 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Reg</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Form</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/reg_icon.png') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='CSS/reg.css') }}">
 </head>
 <body>
+
+<section class="hero is-fullheight">
+    <div class="hero-body">
+        <div class="container">
+            <div class="columns is-centered">
+                <div class="column is-5-tablet is-4-desktop is-3-widescreen">
+
+                    <form id="registrationForm" class="box" method="POST">
+                        <h1 class="title has-text-centered">Register</h1>
+
+                        <div class="field">
+                            <label class="label">Username</label>
+                            <div class="control">
+                                <input class="input" type="text" name="username" id="username"
+                                       placeholder="Enter username" required>
+                            </div>
+                            <p class="help is-danger" id="usernameHelp"></p>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Email</label>
+                            <div class="control">
+                                <input class="input" type="email" name="email" id="email" placeholder="Enter email"
+                                       required>
+                            </div>
+                            <p class="help is-danger" id="emailHelp"></p>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">Password</label>
+                            <div class="control">
+                                <input class="input" type="password" name="password" id="password"
+                                       placeholder="Enter password"
+                                       required>
+                            </div>
+                            <p class="help is-danger" id="passwordHelp"></p>
+                        </div>
+
+                        <div class="field">
+                            <div class="control">
+                                <button type="submit" class="button is-primary is-fullwidth">Register</button>
+                            </div>
+                        </div>
+
+                    </form>
+                    {% if error %}
+                    <div class="notification is-danger is-light mt-4" id="error_message">
+                        <p>{{ error }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='JS/reg.js') }}"></script>
 
 </body>
 </html>

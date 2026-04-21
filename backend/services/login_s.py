@@ -7,10 +7,10 @@ def login_user(email: str, password: str):
     user = User.query.filter_by(email=email).first()
 
     if not user:
-        raise ValueError("User doesn't exists")
+        return None
 
     if not check_password_hash(user.password_hash, password):
-        raise ValueError("Wrong password")
+        return None
 
     access_token = create_access_token(identity=user.id)
     refresh_token = create_refresh_token(identity=user.id)

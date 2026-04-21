@@ -1,0 +1,30 @@
+body {
+    background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+}
+
+.box {
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.title {
+    margin-bottom: 20px;
+}
+
+.input:focus {
+    border-color: #00d1b2;
+    box-shadow: 0 0 0 0.125em rgba(0, 209, 178, 0.25);
+}
+
+.button.is-primary {
+    transition: 0.2s ease;
+}
+
+.button.is-primary:hover {
+    transform: translateY(-2px);
+}
+
+#error_message {
+    text-align: center;
+}
