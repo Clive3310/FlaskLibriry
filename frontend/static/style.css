@@ -1,0 +1,32 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+#reader-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+#book-reader {
+    flex: 1;
+    padding: 20px;
+}
+
+#controls {
+    padding: 10px;
+    background: #f0f0f0;
+}
+
+.dark-theme {
+    background: #121212;
+    color: #fff;
+}
+
+.high-contrast {
+    background: #000;
+    color: #fff;
+    filter: invert(100%);
+}

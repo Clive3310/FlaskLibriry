@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Чтение книги</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.5.21/epub.min.js"></script>
+</head>
+<body>
+    <div id="reader-container">
+        <div id="book-reader"></div>
+        <div id="controls">
+            <button onclick="prevPage()">Назад</button>
+            <button onclick="nextPage()">Вперед</button>
+            <input type="range" min="12" max="36" value="16" id="fontSizeSlider" oninput="changeFontSize(this.value)">
+            <select id="themeSelect" onchange="changeTheme(this.value)">
+                <option value="light">Светлая</option>
+                <option value="dark">Темная</option>
+                <option value="high-contrast">Для слабовидящих</option>
+            </select>
+        </div>
+    </div>
+
+    <script>
+        let book;
+        let currentPage = 1;
+
+        async function initReader() {
+            const response = await fetch(`/api/books/{{ book_id }}/content`);
+            const bookData = await response.json();
+
+            book = new EPUB(bookData.url);
+            const rendition = book.renderTo('book-reader', {
+                spread: 'double',
+                flow: 'scrolled',
+                width: '100%',
+                height: '100%'
+            });
+
+            rendition.ready.then(() => {
+                rendition.display(currentPage);
+            });
+        }
+
+        function prevPage() {
+            currentPage--;
+            rendition.display(currentPage);
+        }
+
+        function nextPage() {
+            currentPage++;
+            rendition.display(currentPage);
+        }
+
+        function changeFontSize(size) {
+            document.getElementById('book-reader').style.fontSize = `${size}px`;
+        }
+
+        function changeTheme(theme) {
+            switch(theme) {
+                case 'light':
+                    document.body.classList.remove('dark-theme', 'high-contrast');
+                    break;
+                case 'dark':
+                    document.body.classList.add('dark-theme');
+                    document.body.classList.remove('high-contrast');
+                    break;
+                case 'high-contrast':
+                    document.body.classList.add('high-contrast');
+                    document.body.classList.remove('dark-theme');
+                    break;
+            }
+        }
+
+        initReader();
+    </script>
+</body>
+</html>

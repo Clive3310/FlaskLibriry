@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Электронная библиотека</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Электронная библиотека</h1>
+        <nav>
+            <a href="/">Главная</a>
+            <a href="/profile">Профиль</a>
+            <a href="/upload">Загрузить книгу</a>
+            <a href="/logout">Выйти</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="Поиск книги..." onkeyup="searchBooks()">
+        </div>
+
+        <div id="books-list" class="book-list">
+            <!-- Здесь будут отображаться книги -->
+        </div>
+
+        <div id="upload-form" class="upload-form">
+            <h2>Загрузить новую книгу</h2>
+            <form id="book-upload" enctype="multipart/form-data">
+                <input type="file" accept=".epub,.fb2,.png" id="book-file">
+                <button type="submit">Загрузить</button>
+            </form>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Электронная библиотека</p>
+    </footer>
+
+    <script>
+        // Функция загрузки списка книг
+        async function loadBooks() {
+            try {
+                const response = await fetch('/api/books');
+                const books = await response.json();
+
+                const booksList = document.getElementById('books-list');
+                booksList.innerHTML = '';
+
+                books.forEach(book => {
+                    const bookItem = document.createElement('div');
+                    bookItem.classList.add('book-item');
+
+                    bookItem.innerHTML = `
+                        <div class="book-title">${book.title}</div>
+                        <button onclick="openBook(${book.id})">Открыть</button>
+                    `;
+
+                    booksList.appendChild(bookItem);
+                });
+            } catch(error) {
+                console.error('Ошибка при загрузке книг:', error);
+            }
+        }
+
+        // Функция поиска книг
+        function searchBooks() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const bookItems = document.querySelectorAll('.book-item');
+
+            bookItems.forEach(item => {
+                const title = item.querySelector('.book-title').innerText.toLowerCase();
+                if(title.includes(query)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // Функция открытия книги
+        function openBook(bookId) {
+            window.location.href = `/reader/${bookId}`;
+        }
+
+        // Обработка загрузки файла
+        document.getElementById('book-upload').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const formData = new FormData(event.target);
+
+            try {
+                const response = await fetch('/api/books', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if(response.ok) {
+                    loadBooks();
+                    alert('Книга успешно загружена!');
+                }
+            } catch(error) {
+                console.error('Ошибка при загрузке книги:', error);
+            }
+        });
+
+        // Загружаем книги при загрузке страницы
+        window.addEventListener('load', loadBooks);
+    </script>
+</body>
+</html>
