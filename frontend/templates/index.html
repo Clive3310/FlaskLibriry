@@ -1,112 +1,487 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Электронная библиотека</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 </head>
 <body>
     <header>
         <h1>Электронная библиотека</h1>
         <nav>
-            <a href="/">Главная</a>
-            <a href="/profile">Профиль</a>
-            <a href="/upload">Загрузить книгу</a>
-            <a href="/logout">Выйти</a>
+            <span id="username-display"></span>
+            <a href="#" onclick="showUpload(); return false;">Загрузить</a>
+            <a href="#" onclick="logout(); return false;">Выйти</a>
         </nav>
+        <div class="theme-selector">
+            <select id="themeSelect" onchange="applyTheme(this.value)">
+                <option value="light">Светлая</option>
+                <option value="dark">Тёмная</option>
+                <option value="high-contrast">Слабовидящим</option>
+            </select>
+        </div>
     </header>
 
     <main>
-        <div class="search-container">
-            <input type="text" id="search-input" placeholder="Поиск книги..." onkeyup="searchBooks()">
+        <!-- Shelf tabs -->
+        <div class="shelf-bar" id="shelf-bar">
+            <button class="shelf-tab active" onclick="selectShelf(null, this)">Все книги</button>
         </div>
 
-        <div id="books-list" class="book-list">
-            <!-- Здесь будут отображаться книги -->
+        <!-- Search -->
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Поиск по названию..." oninput="filterBooks()">
         </div>
 
-        <div id="upload-form" class="upload-form">
-            <h2>Загрузить новую книгу</h2>
-            <form id="book-upload" enctype="multipart/form-data">
-                <input type="file" accept=".epub,.fb2,.png" id="book-file">
-                <button type="submit">Загрузить</button>
-            </form>
+        <!-- Book grid -->
+        <div id="books-grid" class="book-grid">
+            <div class="spinner">Загрузка библиотеки</div>
         </div>
     </main>
 
-    <footer>
-        <p>&copy; 2026 Электронная библиотека</p>
-    </footer>
+    <!-- ── Upload modal ─────────────────────────────── -->
+    <div class="modal-overlay" id="upload-modal">
+        <div class="modal">
+            <h2>Загрузить книгу</h2>
+            <form id="upload-form" onsubmit="uploadBook(event)">
+                <div class="form-group">
+                    <label>Файл книги (EPUB, FB2, PDF, PNG, JPG)</label>
+                    <input type="file" id="book-file" accept=".epub,.fb2,.pdf,.png,.jpg,.jpeg,.gif,.webp" required>
+                </div>
+                <div class="form-group">
+                    <label>Обложка (необязательно)</label>
+                    <input type="file" id="cover-file" accept=".png,.jpg,.jpeg,.gif,.webp">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="hideUpload()">Отмена</button>
+                    <button type="submit" id="upload-btn">Загрузить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ── Book manage modal ────────────────────────── -->
+    <div class="modal-overlay" id="manage-modal">
+        <div class="modal">
+            <h2 id="manage-title">Управление книгой</h2>
+
+            <div style="display:flex; gap:1.25rem; margin-bottom:1.5rem; align-items:flex-start;">
+                <!-- Cover preview -->
+                <div style="flex-shrink:0;">
+                    <div id="manage-cover-preview"
+                         style="width:90px;height:130px;border-radius:8px;overflow:hidden;
+                                background:linear-gradient(135deg,var(--accent),var(--accent-hover));
+                                display:flex;align-items:center;justify-content:center;
+                                color:#fff;font-weight:900;font-size:1.1rem;border:1px solid var(--border);">
+                    </div>
+                    <label style="display:block;margin-top:0.5rem;">
+                        <input type="file" id="manage-cover-input" accept=".png,.jpg,.jpeg,.gif,.webp"
+                               style="display:none" onchange="previewAndUploadCover(this)">
+                        <span class="btn btn-secondary btn-sm" style="cursor:pointer;width:90px;text-align:center;">
+                            Обложка
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Shelf assignment -->
+                <div style="flex:1;">
+                    <p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;
+                               letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.6rem;">
+                        Полки
+                    </p>
+                    <div id="shelf-checkboxes" style="display:flex;flex-direction:column;gap:0.4rem;">
+                        <span style="color:var(--text-muted);font-size:0.88rem;">
+                            Создайте полки, чтобы организовать книги
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-danger" onclick="deleteManagingBook()">Удалить книгу</button>
+                <button class="btn-secondary" onclick="hideManage()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Create shelf modal ───────────────────────── -->
+    <div class="modal-overlay" id="shelf-modal">
+        <div class="modal" style="max-width:360px;">
+            <h2 id="shelf-modal-title">Новая полка</h2>
+            <div class="form-group">
+                <label>Название</label>
+                <input type="text" id="shelf-name-input" placeholder="Например: Читаю сейчас"
+                       onkeydown="if(event.key==='Enter') saveShelf()">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="hideShelfModal()">Отмена</button>
+                <button onclick="saveShelf()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
 
     <script>
-        // Функция загрузки списка книг
-        async function loadBooks() {
-            try {
-                const response = await fetch('/api/books');
-                const books = await response.json();
+    const API = 'http://localhost:8090';
+    const token = localStorage.getItem('token');
+    let allBooks  = [];
+    let allShelves = [];
+    let currentShelf = null;    // null = all books
+    let managingBook = null;
+    let editingShelfId = null;  // null = create, number = rename
 
-                const booksList = document.getElementById('books-list');
-                booksList.innerHTML = '';
+    if (!token) window.location.href = '/login';
 
-                books.forEach(book => {
-                    const bookItem = document.createElement('div');
-                    bookItem.classList.add('book-item');
+    const uname = localStorage.getItem('username');
+    if (uname) document.getElementById('username-display').textContent = uname;
 
-                    bookItem.innerHTML = `
-                        <div class="book-title">${book.title}</div>
-                        <button onclick="openBook(${book.id})">Открыть</button>
-                    `;
+    // ── Theme ───────────────────────────────────────────────────────────────
+    function applyTheme(t) {
+        document.body.className = t === 'light' ? '' : t + '-theme';
+        localStorage.setItem('theme', t);
+    }
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.getElementById('themeSelect').value = savedTheme;
+    applyTheme(savedTheme);
 
-                    booksList.appendChild(bookItem);
-                });
-            } catch(error) {
-                console.error('Ошибка при загрузке книг:', error);
-            }
+    // ── Toast ────────────────────────────────────────────────────────────────
+    function toast(msg, type = '') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = 'toast show' + (type ? ' ' + type : '');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.className = 'toast', 3000);
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Data loading ─────────────────────────────────────────────────────────
+    async function loadAll() {
+        document.getElementById('books-grid').innerHTML =
+            '<div class="spinner">Загрузка библиотеки</div>';
+        try {
+            const [bRes, sRes] = await Promise.all([
+                fetch(`${API}/api/books`),
+                fetch(`${API}/api/shelves`, { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+            allBooks   = await bRes.json();
+            allShelves = sRes.ok ? await sRes.json() : [];
+        } catch {
+            document.getElementById('books-grid').innerHTML =
+                '<div class="empty-state">Ошибка соединения. Убедитесь, что бэкенд запущен на порту 8090.</div>';
+            return;
         }
+        renderShelfBar();
+        filterBooks();
+    }
 
-        // Функция поиска книг
-        function searchBooks() {
-            const query = document.getElementById('search-input').value.toLowerCase();
-            const bookItems = document.querySelectorAll('.book-item');
+    // ── Shelf bar ─────────────────────────────────────────────────────────────
+    function renderShelfBar() {
+        const bar = document.getElementById('shelf-bar');
+        bar.innerHTML =
+            `<button class="shelf-tab${currentShelf === null ? ' active' : ''}"
+                     onclick="selectShelf(null, this)">Все книги</button>`;
 
-            bookItems.forEach(item => {
-                const title = item.querySelector('.book-title').innerText.toLowerCase();
-                if(title.includes(query)) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        }
-
-        // Функция открытия книги
-        function openBook(bookId) {
-            window.location.href = `/reader/${bookId}`;
-        }
-
-        // Обработка загрузки файла
-        document.getElementById('book-upload').addEventListener('submit', async (event) => {
-            event.preventDefault();
-
-            const formData = new FormData(event.target);
-
-            try {
-                const response = await fetch('/api/books', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if(response.ok) {
-                    loadBooks();
-                    alert('Книга успешно загружена!');
-                }
-            } catch(error) {
-                console.error('Ошибка при загрузке книги:', error);
-            }
+        allShelves.forEach(s => {
+            bar.innerHTML +=
+                `<button class="shelf-tab${currentShelf === s.id ? ' active' : ''}"
+                         onclick="selectShelf(${s.id}, this)"
+                         ondblclick="startRenameShelf(${s.id}, '${escHtml(s.name)}')"
+                         title="Двойной клик — переименовать">
+                    ${escHtml(s.name)}
+                    <span onclick="event.stopPropagation(); confirmDeleteShelf(${s.id})"
+                          style="margin-left:0.4rem;opacity:0.6;font-size:0.75rem;"
+                          title="Удалить полку">&#x2715;</span>
+                </button>`;
         });
 
-        // Загружаем книги при загрузке страницы
-        window.addEventListener('load', loadBooks);
+        bar.innerHTML +=
+            `<button class="shelf-tab add-tab" onclick="showShelfModal()">+ Полка</button>`;
+    }
+
+    function selectShelf(id, el) {
+        currentShelf = id;
+        document.querySelectorAll('.shelf-tab').forEach(b => b.classList.remove('active'));
+        el.classList.add('active');
+        filterBooks();
+    }
+
+    // ── Book rendering ────────────────────────────────────────────────────────
+    function visibleBooks() {
+        let books = allBooks;
+        const q = document.getElementById('search-input').value.toLowerCase();
+        if (q) books = books.filter(b => b.title.toLowerCase().includes(q));
+        if (currentShelf !== null) {
+            const shelf = allShelves.find(s => s.id === currentShelf);
+            const ids = shelf ? shelf.book_ids : [];
+            books = books.filter(b => ids.includes(b.id));
+        }
+        return books;
+    }
+
+    function filterBooks() { renderBooks(visibleBooks()); }
+
+    function renderBooks(books) {
+        const grid = document.getElementById('books-grid');
+        if (!books.length) {
+            const msg = currentShelf !== null
+                ? 'На этой полке нет книг. Добавьте книги через управление.'
+                : 'Книг нет. Загрузите первую книгу!';
+            grid.innerHTML = `<div class="empty-state">${msg}</div>`;
+            return;
+        }
+        grid.innerHTML = books.map(b => {
+            const coverHtml = b.has_cover
+                ? `<img src="${API}/api/books/${b.id}/cover/file" alt="" loading="lazy">
+                   <span class="format-overlay">${escHtml(b.format.toUpperCase())}</span>`
+                : escHtml(b.format.toUpperCase());
+            return `
+            <div class="book-card">
+                <div class="book-cover">
+                    ${coverHtml}
+                    <button class="manage-btn" onclick="openManage(${b.id})" title="Управление">&#9881;</button>
+                </div>
+                <div class="book-info">
+                    <div class="book-title">${escHtml(b.title)}</div>
+                    <div class="book-format">${escHtml(b.format)}</div>
+                </div>
+                <div class="book-actions">
+                    <button onclick="openBook(${b.id})">Читать</button>
+                    <button class="btn-danger btn-sm" onclick="deleteBook(${b.id})">X</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function openBook(id) { window.location.href = `/reader/${id}`; }
+
+    // ── Upload book ───────────────────────────────────────────────────────────
+    function showUpload() { document.getElementById('upload-modal').classList.add('active'); }
+    function hideUpload() {
+        document.getElementById('upload-modal').classList.remove('active');
+        document.getElementById('upload-form').reset();
+    }
+
+    async function uploadBook(e) {
+        e.preventDefault();
+        const file = document.getElementById('book-file').files[0];
+        if (!file) return;
+        const btn = document.getElementById('upload-btn');
+        btn.disabled = true; btn.textContent = 'Загрузка...';
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const res = await fetch(`${API}/api/books`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: form
+            });
+            const data = await res.json();
+            if (!res.ok) { toast(data.error || 'Ошибка загрузки', 'error'); return; }
+
+            // Upload cover if provided
+            const coverFile = document.getElementById('cover-file').files[0];
+            if (coverFile) {
+                const cf = new FormData();
+                cf.append('cover', coverFile);
+                await fetch(`${API}/api/books/${data.id}/cover`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: cf
+                });
+            }
+            toast('Книга загружена!', 'success');
+            hideUpload();
+            await loadAll();
+        } catch { toast('Ошибка соединения', 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Загрузить'; }
+    }
+
+    // ── Delete book ───────────────────────────────────────────────────────────
+    async function deleteBook(id) {
+        if (!confirm('Удалить книгу из библиотеки?')) return;
+        try {
+            const res = await fetch(`${API}/api/books/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) { toast('Книга удалена', 'success'); await loadAll(); }
+            else { const d = await res.json(); toast(d.error || 'Ошибка', 'error'); }
+        } catch { toast('Ошибка соединения', 'error'); }
+    }
+
+    // ── Book manage modal ─────────────────────────────────────────────────────
+    function openManage(bookId) {
+        managingBook = allBooks.find(b => b.id === bookId);
+        if (!managingBook) return;
+
+        document.getElementById('manage-title').textContent = managingBook.title;
+
+        // Cover preview
+        const preview = document.getElementById('manage-cover-preview');
+        if (managingBook.has_cover) {
+            preview.innerHTML = `<img src="${API}/api/books/${bookId}/cover/file"
+                style="width:100%;height:100%;object-fit:cover;" alt="">`;
+        } else {
+            preview.textContent = managingBook.format.toUpperCase();
+        }
+
+        // Shelf checkboxes
+        const container = document.getElementById('shelf-checkboxes');
+        if (!allShelves.length) {
+            container.innerHTML =
+                `<span style="color:var(--text-muted);font-size:0.88rem;">
+                    Нет полок. <a href="#" onclick="hideManage();showShelfModal();return false;"
+                    style="color:var(--accent);">Создать полку</a>
+                </span>`;
+        } else {
+            container.innerHTML = allShelves.map(s => {
+                const checked = s.book_ids.includes(bookId);
+                return `<label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-size:0.9rem;">
+                    <input type="checkbox" ${checked ? 'checked' : ''}
+                           onchange="toggleShelf(${s.id}, ${bookId}, this.checked)">
+                    ${escHtml(s.name)}
+                </label>`;
+            }).join('');
+        }
+
+        document.getElementById('manage-modal').classList.add('active');
+    }
+
+    function hideManage() {
+        document.getElementById('manage-modal').classList.remove('active');
+        managingBook = null;
+    }
+
+    async function toggleShelf(shelfId, bookId, add) {
+        const method = add ? 'POST' : 'DELETE';
+        try {
+            await fetch(`${API}/api/shelves/${shelfId}/books/${bookId}`, {
+                method,
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            // Update local state
+            const shelf = allShelves.find(s => s.id === shelfId);
+            if (shelf) {
+                if (add && !shelf.book_ids.includes(bookId)) shelf.book_ids.push(bookId);
+                if (!add) shelf.book_ids = shelf.book_ids.filter(id => id !== bookId);
+            }
+            if (currentShelf !== null) filterBooks();
+        } catch { toast('Ошибка соединения', 'error'); }
+    }
+
+    async function previewAndUploadCover(input) {
+        if (!managingBook || !input.files[0]) return;
+        const file = input.files[0];
+        // Optimistic preview
+        const preview = document.getElementById('manage-cover-preview');
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;">`;
+
+        const form = new FormData();
+        form.append('cover', file);
+        try {
+            const res = await fetch(`${API}/api/books/${managingBook.id}/cover`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: form
+            });
+            if (res.ok) {
+                managingBook.has_cover = true;
+                // Refresh card cover
+                const cardCovers = document.querySelectorAll('.book-cover');
+                // just reload all
+                toast('Обложка сохранена', 'success');
+                await loadAll();
+                // reopen modal with fresh data
+                openManage(managingBook.id);
+            } else {
+                toast('Ошибка загрузки обложки', 'error');
+            }
+        } catch { toast('Ошибка соединения', 'error'); }
+    }
+
+    async function deleteManagingBook() {
+        if (!managingBook) return;
+        hideManage();
+        await deleteBook(managingBook.id);
+    }
+
+    // ── Shelf management ──────────────────────────────────────────────────────
+    function showShelfModal(id = null, name = '') {
+        editingShelfId = id;
+        document.getElementById('shelf-modal-title').textContent =
+            id ? 'Переименовать полку' : 'Новая полка';
+        document.getElementById('shelf-name-input').value = name;
+        document.getElementById('shelf-modal').classList.add('active');
+        setTimeout(() => document.getElementById('shelf-name-input').focus(), 50);
+    }
+
+    function hideShelfModal() {
+        document.getElementById('shelf-modal').classList.remove('active');
+        editingShelfId = null;
+    }
+
+    function startRenameShelf(id, name) { showShelfModal(id, name); }
+
+    async function saveShelf() {
+        const name = document.getElementById('shelf-name-input').value.trim();
+        if (!name) return;
+        try {
+            let res;
+            if (editingShelfId) {
+                res = await fetch(`${API}/api/shelves/${editingShelfId}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+            } else {
+                res = await fetch(`${API}/api/shelves`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+            }
+            if (res.ok) {
+                hideShelfModal();
+                await loadAll();
+            } else {
+                const d = await res.json();
+                toast(d.error || 'Ошибка', 'error');
+            }
+        } catch { toast('Ошибка соединения', 'error'); }
+    }
+
+    async function confirmDeleteShelf(id) {
+        const shelf = allShelves.find(s => s.id === id);
+        if (!shelf) return;
+        if (!confirm(`Удалить полку "${shelf.name}"? Книги останутся в библиотеке.`)) return;
+        try {
+            const res = await fetch(`${API}/api/shelves/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                if (currentShelf === id) currentShelf = null;
+                toast('Полка удалена', 'success');
+                await loadAll();
+            }
+        } catch { toast('Ошибка соединения', 'error'); }
+    }
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    function logout() {
+        ['token','username','user_id'].forEach(k => localStorage.removeItem(k));
+        window.location.href = '/login';
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    loadAll();
     </script>
 </body>
 </html>

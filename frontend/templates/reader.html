@@ -1,77 +1,238 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Чтение книги</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Читалка — Электронная библиотека</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.5.21/epub.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.93/epub.min.js"></script>
 </head>
-<body>
-    <div id="reader-container">
-        <div id="book-reader"></div>
-        <div id="controls">
-            <button onclick="prevPage()">Назад</button>
-            <button onclick="nextPage()">Вперед</button>
-            <input type="range" min="12" max="36" value="16" id="fontSizeSlider" oninput="changeFontSize(this.value)">
-            <select id="themeSelect" onchange="changeTheme(this.value)">
+<body class="reader-layout">
+    <header class="reader-header">
+        <a href="/" class="btn btn-secondary back-btn">Назад</a>
+        <h2 id="book-title">Загрузка...</h2>
+        <div class="theme-selector">
+            <select id="themeSelect" onchange="applyTheme(this.value)">
                 <option value="light">Светлая</option>
-                <option value="dark">Темная</option>
-                <option value="high-contrast">Для слабовидящих</option>
+                <option value="dark">Тёмная</option>
+                <option value="high-contrast">Слабовидящим</option>
             </select>
+        </div>
+    </header>
+
+    <div class="reader-toolbar" id="toolbar">
+        <div class="ctrl-group">
+            <label>Шрифт</label>
+            <input type="range" id="font-size" min="12" max="40" value="16" oninput="changeFontSize(this.value)">
+            <span id="fs-val">16px</span>
+        </div>
+        <div class="ctrl-group">
+            <label>Страниц</label>
+            <select id="spread-select" onchange="changeSpread(this.value)">
+                <option value="none">1</option>
+                <option value="auto">2</option>
+            </select>
+        </div>
+        <div class="ctrl-group" id="page-info" style="display:none">
+            <label>Страница</label>
+            <span id="page-display">—</span>
         </div>
     </div>
 
+    <div id="reader-area">
+        <div class="spinner" id="loading-msg">Загрузка книги</div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
     <script>
-        let book;
-        let currentPage = 1;
+        const API = 'http://localhost:8090';
+        const BOOK_ID = {{ book_id }};
+        const token = localStorage.getItem('token');
 
-        async function initReader() {
-            const response = await fetch(`/api/books/{{ book_id }}/content`);
-            const bookData = await response.json();
+        let book = null, rendition = null;
+        let saveTimer = null;
+        let currentFormat = '';
 
-            book = new EPUB(bookData.url);
-            const rendition = book.renderTo('book-reader', {
-                spread: 'double',
-                flow: 'scrolled',
-                width: '100%',
-                height: '100%'
-            });
-
-            rendition.ready.then(() => {
-                rendition.display(currentPage);
-            });
+        // ===== Theme =====
+        function applyTheme(t) {
+            document.body.className = 'reader-layout' + (t === 'light' ? '' : ' ' + t + '-theme');
+            localStorage.setItem('theme', t);
+            if (rendition && currentFormat === 'epub') applyEpubTheme(t);
         }
 
-        function prevPage() {
-            currentPage--;
-            rendition.display(currentPage);
+        const EPUB_THEMES = {
+            light:          { background: '#ffffff', color: '#333333' },
+            dark:           { background: '#1a1a2e', color: '#e0e0e0' },
+            'high-contrast':{ background: '#000000', color: '#ffff00' }
+        };
+
+        function applyEpubTheme(t) {
+            const th = EPUB_THEMES[t] || EPUB_THEMES.light;
+            rendition.themes.override('background', th.background);
+            rendition.themes.override('color', th.color);
+            rendition.themes.override('body-background', th.background);
         }
 
-        function nextPage() {
-            currentPage++;
-            rendition.display(currentPage);
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.getElementById('themeSelect').value = savedTheme;
+        applyTheme(savedTheme);
+
+        // ===== Toast =====
+        function toast(msg, type = '') {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.className = 'toast show' + (type ? ' ' + type : '');
+            clearTimeout(el._t);
+            el._t = setTimeout(() => el.className = 'toast', 3000);
         }
 
-        function changeFontSize(size) {
-            document.getElementById('book-reader').style.fontSize = `${size}px`;
-        }
+        // ===== Load book =====
+        async function loadBook() {
+            try {
+                const res = await fetch(`${API}/api/books`);
+                const books = await res.json();
+                const info = books.find(b => b.id === BOOK_ID);
+                if (!info) { showError('Книга не найдена'); return; }
 
-        function changeTheme(theme) {
-            switch(theme) {
-                case 'light':
-                    document.body.classList.remove('dark-theme', 'high-contrast');
-                    break;
-                case 'dark':
-                    document.body.classList.add('dark-theme');
-                    document.body.classList.remove('high-contrast');
-                    break;
-                case 'high-contrast':
-                    document.body.classList.add('high-contrast');
-                    document.body.classList.remove('dark-theme');
-                    break;
+                document.title = info.title + ' — Электронная библиотека';
+                document.getElementById('book-title').textContent = info.title;
+
+                currentFormat = info.format.toLowerCase();
+                const fileUrl = `${API}/api/books/${BOOK_ID}/file`;
+
+                if (currentFormat === 'epub') {
+                    await initEpub(fileUrl);
+                } else if (['png','jpg','jpeg','gif','webp'].includes(currentFormat)) {
+                    showImage(fileUrl, info.title);
+                } else if (currentFormat === 'pdf') {
+                    showPdf(fileUrl);
+                } else {
+                    showError(`Просмотр формата .${info.format} в браузере не поддерживается`);
+                }
+            } catch (e) {
+                showError('Ошибка при загрузке книги');
+                console.error(e);
             }
         }
 
-        initReader();
+        function showError(msg) {
+            document.getElementById('reader-area').innerHTML =
+                `<div class="unsupported-msg">${msg}</div>`;
+        }
+
+        // ===== EPUB =====
+        async function initEpub(url) {
+            const area = document.getElementById('reader-area');
+            area.innerHTML = '<div id="epub-viewer"></div>' +
+                '<button class="nav-btn" id="prev-btn" onclick="prevPage()">&#8249;</button>' +
+                '<button class="nav-btn" id="next-btn" onclick="nextPage()">&#8250;</button>';
+
+            document.getElementById('page-info').style.display = 'flex';
+
+            book = ePub(url);
+            rendition = book.renderTo('epub-viewer', {
+                width: '100%',
+                height: '100%',
+                spread: 'none'
+            });
+
+            applyEpubTheme(localStorage.getItem('theme') || 'light');
+            const fs = document.getElementById('font-size').value;
+            rendition.themes.fontSize(`${fs}px`);
+
+            // Restore position
+            let startCfi = null;
+            try {
+                const pr = await fetch(`${API}/api/books/${BOOK_ID}/position`);
+                const pd = await pr.json();
+                if (pd.position) startCfi = pd.position;
+            } catch {}
+
+            await (startCfi ? rendition.display(startCfi) : rendition.display());
+
+            rendition.on('relocated', loc => {
+                const p = loc.start.displayed;
+                document.getElementById('page-display').textContent =
+                    p.total ? `${p.page} / ${p.total}` : '—';
+                scheduleSave(loc.start.cfi);
+            });
+
+            book.ready.then(() => book.locations.generate(1024).catch(() => {}));
+        }
+
+        function prevPage() { if (rendition) rendition.prev(); }
+        function nextPage() { if (rendition) rendition.next(); }
+
+        function changeFontSize(val) {
+            document.getElementById('fs-val').textContent = val + 'px';
+            if (rendition && currentFormat === 'epub') rendition.themes.fontSize(`${val}px`);
+        }
+
+        function changeSpread(val) {
+            if (!rendition || currentFormat !== 'epub') return;
+            const cfi = rendition.currentLocation()?.start?.cfi;
+            rendition.destroy();
+            const theme = localStorage.getItem('theme') || 'light';
+            const fs = document.getElementById('font-size').value;
+            rendition = book.renderTo('epub-viewer', { width: '100%', height: '100%', spread: val });
+            applyEpubTheme(theme);
+            rendition.themes.fontSize(`${fs}px`);
+            cfi ? rendition.display(cfi) : rendition.display();
+            rendition.on('relocated', loc => {
+                const p = loc.start.displayed;
+                document.getElementById('page-display').textContent =
+                    p.total ? `${p.page} / ${p.total}` : '—';
+                scheduleSave(loc.start.cfi);
+            });
+        }
+
+        // ===== PDF =====
+        function showPdf(url) {
+            document.getElementById('reader-area').innerHTML =
+                `<iframe src="${url}" style="width:100%;height:100%;border:none;display:block;"></iframe>`;
+            document.getElementById('toolbar').style.display = 'none';
+        }
+
+        // ===== Image =====
+        function showImage(url, title) {
+            document.getElementById('reader-area').innerHTML =
+                `<div class="image-viewer"><img src="${url}" alt="${escHtml(title)}"></div>`;
+            document.getElementById('toolbar').style.display = 'none';
+        }
+
+        function escHtml(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // ===== Save position =====
+        function scheduleSave(cfi) {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => savePosition(cfi), 1500);
+        }
+
+        async function savePosition(position) {
+            if (!token) return;
+            try {
+                await fetch(`${API}/api/books/${BOOK_ID}/position`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ position })
+                });
+            } catch {}
+        }
+
+        // ===== Keyboard =====
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft')  prevPage();
+            if (e.key === 'ArrowRight') nextPage();
+        });
+
+        loadBook();
     </script>
 </body>
 </html>

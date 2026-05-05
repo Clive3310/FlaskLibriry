@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Электронная библиотека</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Электронная библиотека</h1>
+        <div class="theme-selector">
+            <select id="themeSelect" onchange="applyTheme(this.value)">
+                <option value="light">Светлая</option>
+                <option value="dark">Тёмная</option>
+                <option value="high-contrast">Слабовидящим</option>
+            </select>
+        </div>
+    </header>
+
+    <div class="auth-wrap">
+        <div class="auth-box">
+            <h2>Добро пожаловать</h2>
+
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')">Вход</button>
+                <button class="auth-tab" onclick="switchTab('register')">Регистрация</button>
+            </div>
+
+            <div class="auth-form active" id="login-form">
+                <div class="form-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="l-username" placeholder="Введите имя..." autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="l-password" placeholder="Введите пароль..." autocomplete="current-password">
+                </div>
+                <div class="error-msg" id="l-error"></div>
+                <button onclick="doLogin()" class="full-width">Войти</button>
+            </div>
+
+            <div class="auth-form" id="register-form">
+                <div class="form-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="r-username" placeholder="Придумайте имя..." autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="r-password" placeholder="Минимум 4 символа..." autocomplete="new-password">
+                </div>
+                <div class="error-msg" id="r-error"></div>
+                <button onclick="doRegister()" class="full-width">Зарегистрироваться</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8090';
+
+        if (localStorage.getItem('token')) window.location.href = '/';
+
+        function applyTheme(t) {
+            document.body.className = t === 'light' ? '' : t + '-theme';
+            localStorage.setItem('theme', t);
+        }
+
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.getElementById('themeSelect').value = savedTheme;
+        applyTheme(savedTheme);
+
+        function switchTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach((el, i) =>
+                el.classList.toggle('active', (tab === 'login') ? i === 0 : i === 1)
+            );
+            document.getElementById('login-form').classList.toggle('active', tab === 'login');
+            document.getElementById('register-form').classList.toggle('active', tab === 'register');
+        }
+
+        function showError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.classList.add('visible');
+        }
+
+        function clearError(id) {
+            document.getElementById(id).classList.remove('visible');
+        }
+
+        async function doLogin() {
+            clearError('l-error');
+            const username = document.getElementById('l-username').value.trim();
+            const password = document.getElementById('l-password').value;
+            if (!username || !password) { showError('l-error', 'Заполните все поля'); return; }
+            try {
+                const res = await fetch(`${API}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('username', data.username);
+                    localStorage.setItem('user_id', data.user_id);
+                    window.location.href = '/';
+                } else {
+                    showError('l-error', data.error || 'Ошибка входа');
+                }
+            } catch {
+                showError('l-error', 'Не удалось подключиться к серверу');
+            }
+        }
+
+        async function doRegister() {
+            clearError('r-error');
+            const username = document.getElementById('r-username').value.trim();
+            const password = document.getElementById('r-password').value;
+            if (!username || !password) { showError('r-error', 'Заполните все поля'); return; }
+            if (password.length < 4) { showError('r-error', 'Пароль минимум 4 символа'); return; }
+            try {
+                const res = await fetch(`${API}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const lr = await fetch(`${API}/api/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const ld = await lr.json();
+                    localStorage.setItem('token', ld.token);
+                    localStorage.setItem('username', ld.username);
+                    localStorage.setItem('user_id', ld.user_id);
+                    window.location.href = '/';
+                } else {
+                    showError('r-error', data.error || 'Ошибка регистрации');
+                }
+            } catch {
+                showError('r-error', 'Не удалось подключиться к серверу');
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key !== 'Enter') return;
+            const loginActive = document.getElementById('login-form').classList.contains('active');
+            if (loginActive) doLogin(); else doRegister();
+        });
+    </script>
+</body>
+</html>
